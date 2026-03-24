@@ -88,6 +88,22 @@
   .btn-next:disabled, .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
   .inline-error { color: var(--danger); font-size: 0.75rem; margin-top: -0.5rem; margin-bottom: 0.8rem; display: none; }
   .pass-toggle-link { color: var(--primary); font-size: 0.8rem; cursor: pointer; font-weight: 600; margin-top: -0.5rem; margin-bottom: 0.8rem; display: inline-block; }
+  .field.invalid, .field-light.invalid { border-color: var(--danger); background: #fff7f7; }
+  .field.valid, .field-light.valid { border-color: var(--success); }
+  .password-checklist { background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: 10px; padding: 0.7rem 0.8rem; margin-top: -0.5rem; margin-bottom: 0.8rem; }
+  .password-checklist-title { font-size: 0.72rem; color: var(--gray-600); font-weight: 700; margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .password-checklist ul { list-style: none; display: grid; gap: 0.2rem; }
+  .password-checklist li { font-size: 0.74rem; color: var(--gray-600); font-weight: 500; display: flex; align-items: center; gap: 0.4rem; }
+  .password-checklist li::before { content: '•'; color: var(--gray-400); font-size: 0.85rem; }
+  .password-checklist li.ok { color: var(--success); }
+  .password-checklist li.ok::before { content: '✓'; color: var(--success); }
+  .password-strength { font-size: 0.74rem; font-weight: 700; margin-top: 0.45rem; }
+  .password-strength.weak { color: var(--danger); }
+  .password-strength.medium { color: var(--warning); }
+  .password-strength.strong { color: var(--success); }
+  .btn-primary.loading, .btn-next.loading { position: relative; pointer-events: none; }
+  .btn-primary.loading::after, .btn-next.loading::after { content: ''; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.5); border-top-color: #fff; border-radius: 50%; display: inline-block; margin-left: 8px; vertical-align: middle; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ========== APP SHELL ========== */
   #view-app { flex-direction: row; }
@@ -399,16 +415,16 @@
         <button type="button" class="role-pill" onclick="setLoginRole('clubAdmin', this)"><i class="fas fa-building"></i> Club Admin</button>
       </div>
       <div class="role-hint" id="login-role-hint"><i class="fas fa-info-circle"></i> Student mode: use student account credentials.</div>
-      <div class="error-msg" id="login-error"><i class="fas fa-exclamation-circle"></i> Invalid credentials. Try admin / password</div>
+      <div class="error-msg" id="login-error" role="alert" aria-live="assertive"><i class="fas fa-exclamation-circle"></i> Invalid credentials. Try admin / password</div>
       <div class="field">
         <label>Username</label>
-        <input type="text" id="login-user" placeholder="alex.johnson" />
+        <input type="text" id="login-user" placeholder="alex.johnson" autocomplete="username" />
       </div>
       <div class="field">
         <label>Password</label>
-        <input type="password" id="login-pass" placeholder="••••••••" />
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" />
       </div>
-      <button class="btn-primary" onclick="doLogin()">Sign In</button>
+      <button class="btn-primary" id="login-submit" onclick="doLogin()">Sign In</button>
       <div class="login-links">
         <a onclick="alert('Password reset feature coming soon!')">Forgot Password?</a>
         <a class="signup-link" onclick="showView('view-signup')">Create Account <i class="fas fa-arrow-right" style="font-size:0.75rem;margin-left:4px;"></i></a>
@@ -435,6 +451,17 @@
       <input type="password" placeholder="Password" id="signup-password" oninput="validateSignupForm()" />
     </div>
     <span class="pass-toggle-link" onclick="togglePassword('signup-password', this)">Show password</span>
+    <div class="password-checklist" id="signup-password-checklist">
+      <div class="password-checklist-title">Password requirements</div>
+      <ul>
+        <li id="pwd-rule-length">At least 10 characters</li>
+        <li id="pwd-rule-upper">At least one uppercase letter</li>
+        <li id="pwd-rule-lower">At least one lowercase letter</li>
+        <li id="pwd-rule-number">At least one number</li>
+        <li id="pwd-rule-special">At least one special character</li>
+      </ul>
+      <div class="password-strength" id="signup-password-strength">Strength: Weak</div>
+    </div>
     <div class="inline-error" id="signup-password-error"></div>
     <div class="field-light">
       <input type="password" placeholder="Confirm Password" id="signup-confirm-password" oninput="validateSignupForm()" />
@@ -1144,6 +1171,237 @@
     }
   };
 
+  const AUTH_POLICY = {
+    usernameMin: 3,
+    usernameMax: 20,
+    passwordMin: 10,
+    ageMin: 16,
+    ageMax: 90,
+    maxSkills: 10,
+    maxImageSizeBytes: 5 * 1024 * 1024,
+    lockoutBaseAttempts: 5,
+    lockoutBaseSeconds: 30,
+    lockoutStepSeconds: 15,
+    lockoutMaxSeconds: 300
+  };
+
+  let loginInFlight = false;
+
+  function normalizeUsername(value) {
+    return (value || '').trim().toLowerCase();
+  }
+
+  function normalizeEmail(value) {
+    return (value || '').trim().toLowerCase();
+  }
+
+  function passwordRules(password) {
+    const value = password || '';
+    return {
+      length: value.length >= AUTH_POLICY.passwordMin,
+      upper: /[A-Z]/.test(value),
+      lower: /[a-z]/.test(value),
+      number: /\d/.test(value),
+      special: /[^A-Za-z0-9]/.test(value)
+    };
+  }
+
+  function validateEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(value || '');
+  }
+
+  function isValidFullName(value) {
+    return /^[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,50}$/.test(value || '');
+  }
+
+  function parsePhone(value) {
+    const raw = (value || '').trim();
+    const cleaned = raw.replace(/[\s()-]/g, '');
+    return {
+      raw,
+      cleaned,
+      valid: /^\+?[1-9]\d{9,14}$/.test(cleaned) || /^\d{10}$/.test(cleaned)
+    };
+  }
+
+  function validateDobWithAgeBounds(value) {
+    if (!value) return { valid: false, reason: 'required' };
+    const dobDate = new Date(value + 'T00:00:00');
+    if (Number.isNaN(dobDate.getTime())) return { valid: false, reason: 'invalid' };
+
+    const now = new Date();
+    if (dobDate > now) return { valid: false, reason: 'future' };
+
+    let age = now.getFullYear() - dobDate.getFullYear();
+    const monthDelta = now.getMonth() - dobDate.getMonth();
+    if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < dobDate.getDate())) age--;
+
+    if (age < AUTH_POLICY.ageMin) return { valid: false, reason: 'too-young' };
+    if (age > AUTH_POLICY.ageMax) return { valid: false, reason: 'too-old' };
+    return { valid: true, age };
+  }
+
+  function getNormalizedSkills() {
+    const seen = new Set();
+    const normalized = [];
+    document.querySelectorAll('.profile-skill-input').forEach(input => {
+      const raw = (input.value || '').trim();
+      if (!raw) return;
+      const key = raw.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      normalized.push(raw);
+    });
+    return normalized;
+  }
+
+  function getLoginGuardState() {
+    try {
+      return JSON.parse(localStorage.getItem('cc_login_guard') || '{"failedAttempts":0,"lockUntil":0}');
+    } catch (e) {
+      return { failedAttempts: 0, lockUntil: 0 };
+    }
+  }
+
+  function setLoginGuardState(state) {
+    localStorage.setItem('cc_login_guard', JSON.stringify(state));
+  }
+
+  function getLockoutRemainingMs() {
+    const state = getLoginGuardState();
+    const lockUntil = Number(state.lockUntil || 0);
+    return Math.max(0, lockUntil - Date.now());
+  }
+
+  function clearLoginFailures() {
+    setLoginGuardState({ failedAttempts: 0, lockUntil: 0 });
+  }
+
+  function registerFailedLoginAttempt() {
+    const state = getLoginGuardState();
+    state.failedAttempts = Number(state.failedAttempts || 0) + 1;
+
+    if (state.failedAttempts >= AUTH_POLICY.lockoutBaseAttempts) {
+      const step = state.failedAttempts - AUTH_POLICY.lockoutBaseAttempts;
+      const durationSec = Math.min(
+        AUTH_POLICY.lockoutMaxSeconds,
+        AUTH_POLICY.lockoutBaseSeconds + (step * AUTH_POLICY.lockoutStepSeconds)
+      );
+      state.lockUntil = Date.now() + (durationSec * 1000);
+    }
+
+    setLoginGuardState(state);
+  }
+
+  function setButtonLoading(button, loading, loadingLabel) {
+    if (!button) return;
+    if (!button.dataset.defaultLabel) button.dataset.defaultLabel = button.textContent;
+    button.classList.toggle('loading', !!loading);
+    button.disabled = !!loading;
+    button.textContent = loading ? loadingLabel : button.dataset.defaultLabel;
+  }
+
+  function getFieldContainer(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return null;
+    return input.closest('.field') || input.closest('.field-light');
+  }
+
+  function setFieldError(inputId, errorId, message) {
+    setInlineError(errorId, message);
+    const input = document.getElementById(inputId);
+    const container = getFieldContainer(inputId);
+    if (input) input.setAttribute('aria-invalid', message ? 'true' : 'false');
+    if (container) {
+      container.classList.remove('invalid', 'valid');
+      container.classList.add(message ? 'invalid' : 'valid');
+    }
+  }
+
+  function clearFieldState(inputId, errorId) {
+    setInlineError(errorId, '');
+    const input = document.getElementById(inputId);
+    const container = getFieldContainer(inputId);
+    if (input) input.removeAttribute('aria-invalid');
+    if (container) container.classList.remove('invalid', 'valid');
+  }
+
+  function updatePasswordChecklist(password) {
+    const rules = passwordRules(password);
+    const ids = {
+      length: 'pwd-rule-length',
+      upper: 'pwd-rule-upper',
+      lower: 'pwd-rule-lower',
+      number: 'pwd-rule-number',
+      special: 'pwd-rule-special'
+    };
+
+    Object.keys(ids).forEach(key => {
+      const el = document.getElementById(ids[key]);
+      if (el) el.classList.toggle('ok', !!rules[key]);
+    });
+
+    const score = Object.values(rules).filter(Boolean).length;
+    const strength = document.getElementById('signup-password-strength');
+    if (!strength) return;
+
+    strength.classList.remove('weak', 'medium', 'strong');
+    if (score <= 2) {
+      strength.textContent = 'Strength: Weak';
+      strength.classList.add('weak');
+    } else if (score <= 4) {
+      strength.textContent = 'Strength: Medium';
+      strength.classList.add('medium');
+    } else {
+      strength.textContent = 'Strength: Strong';
+      strength.classList.add('strong');
+    }
+  }
+
+  function createRandomHex(bytesLength) {
+    const bytes = new Uint8Array(bytesLength);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function sha256Hex(text) {
+    const data = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function buildPasswordRecord(password) {
+    const passwordSalt = createRandomHex(16);
+    const passwordHash = await sha256Hex(passwordSalt + password);
+    return { passwordSalt, passwordHash };
+  }
+
+  async function verifyAccountPassword(account, enteredPassword, usernameKey) {
+    if (!account || !enteredPassword) return false;
+
+    if (account.passwordHash && account.passwordSalt) {
+      const incomingHash = await sha256Hex(account.passwordSalt + enteredPassword);
+      return incomingHash === account.passwordHash;
+    }
+
+    if (Array.isArray(account.passwords) && account.passwords.includes(enteredPassword)) {
+      if (!userDirectory[usernameKey]) {
+        const storedUsers = getStoredUsers();
+        const user = storedUsers[usernameKey];
+        if (user) {
+          const passwordRecord = await buildPasswordRecord(enteredPassword);
+          user.passwordHash = passwordRecord.passwordHash;
+          user.passwordSalt = passwordRecord.passwordSalt;
+          delete user.password;
+          saveStoredUsers(storedUsers);
+        }
+      }
+      return true;
+    }
+
+    return false;
+  }
+
   function getStoredUsers() {
     try {
       return JSON.parse(localStorage.getItem('cc_users') || '{}');
@@ -1166,14 +1424,16 @@
   }
 
   function getAccount(username) {
-    const key = (username || '').toLowerCase();
+    const key = normalizeUsername(username);
     if (userDirectory[key]) return userDirectory[key];
     const storedUsers = getStoredUsers();
     if (storedUsers[key]) {
       return {
         name: storedUsers[key].name || storedUsers[key].username,
         email: storedUsers[key].email,
-        passwords: [storedUsers[key].password],
+        passwords: storedUsers[key].password ? [storedUsers[key].password] : [],
+        passwordHash: storedUsers[key].passwordHash,
+        passwordSalt: storedUsers[key].passwordSalt,
         role: 'student',
         canManageClubs: false
       };
@@ -1207,24 +1467,65 @@
         userInput.value = 'alex.johnson';
       }
     }
+    document.getElementById('login-error').style.display = 'none';
+    clearFieldState('login-user', 'login-error');
+    clearFieldState('login-pass', 'login-error');
   }
 
-  function doLogin() {
-    const user = document.getElementById('login-user').value.trim();
-    const pass = document.getElementById('login-pass').value.trim();
-    const err = document.getElementById('login-error');
-    const account = getAccount(user);
+  function validateLoginForm(showErrors = true) {
+    const user = normalizeUsername(document.getElementById('login-user').value);
+    const pass = document.getElementById('login-pass').value;
 
-    if (account && account.passwords.includes(pass)) {
+    const userOk = /^[a-z0-9.]{3,30}$/.test(user);
+    const passOk = !!(pass && pass.trim().length > 0);
+
+    if (showErrors) {
+      setFieldError('login-user', 'login-error', user ? (userOk ? '' : 'Use only lowercase letters, numbers, or dots in username') : 'Username is required');
+      setFieldError('login-pass', 'login-error', pass ? (passOk ? '' : 'Password is required') : 'Password is required');
+    }
+
+    return userOk && passOk;
+  }
+
+  async function doLogin() {
+    if (loginInFlight) return;
+
+    const user = normalizeUsername(document.getElementById('login-user').value);
+    const pass = document.getElementById('login-pass').value;
+    const err = document.getElementById('login-error');
+    const submitBtn = document.getElementById('login-submit');
+
+    if (!validateLoginForm(true)) return;
+
+    const lockMs = getLockoutRemainingMs();
+    if (lockMs > 0) {
+      err.innerHTML = '<i class="fas fa-lock"></i> Too many failed attempts. Try again in ' + Math.ceil(lockMs / 1000) + 's.';
+      err.style.display = 'flex';
+      err.style.alignItems = 'center';
+      return;
+    }
+
+    loginInFlight = true;
+    setButtonLoading(submitBtn, true, 'Signing In...');
+
+    const account = getAccount(user);
+    const isAuthenticated = await verifyAccountPassword(account, pass, user);
+
+    if (account && isAuthenticated) {
       const roleMatch = selectedLoginRole === 'clubAdmin' ? account.canManageClubs : !account.canManageClubs;
       if (!roleMatch) {
-        err.innerHTML = '<i class="fas fa-exclamation-circle"></i> Selected role does not match this account. Switch role and try again.';
+        err.innerHTML = '<i class="fas fa-exclamation-circle"></i> This account is not authorized for the selected role.';
         err.style.display = 'flex';
         err.style.alignItems = 'center';
+        registerFailedLoginAttempt();
+        setButtonLoading(submitBtn, false, 'Signing In...');
+        loginInFlight = false;
         return;
       }
 
-      currentUser.username = user.toLowerCase();
+      clearLoginFailures();
+
+      currentUser.username = user;
       currentUser.name = account.name;
       currentUser.initials = account.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
       currentUser.email = account.email;
@@ -1238,17 +1539,19 @@
       initCalendar();
       showToast('Welcome back! ' + currentUser.name);
     } else {
+      registerFailedLoginAttempt();
+      const retryMs = getLockoutRemainingMs();
       err.innerHTML = '<i class="fas fa-exclamation-circle"></i> Invalid credentials. Please check username and password.';
+      if (retryMs > 0) {
+        err.innerHTML = '<i class="fas fa-lock"></i> Too many failed attempts. Try again in ' + Math.ceil(retryMs / 1000) + 's.';
+      }
       err.style.display = 'flex';
       err.style.alignItems = 'center';
     }
+
+    setButtonLoading(submitBtn, false, 'Signing In...');
+    loginInFlight = false;
   }
-  document.addEventListener('DOMContentLoaded', function() {
-    const passInput = document.getElementById('login-pass');
-    if (passInput) {
-      passInput.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
-    }
-  });
 
   // ===== SIGNUP =====
   function setInlineError(id, msg) {
@@ -1256,25 +1559,30 @@
     if (!el) return;
     el.textContent = msg || '';
     el.style.display = msg ? 'block' : 'none';
+    el.setAttribute('role', 'alert');
+    el.setAttribute('aria-live', 'polite');
   }
 
   function validateSignupForm() {
-    const username = document.getElementById('signup-username').value.trim();
-    const email = document.getElementById('signup-email').value.trim();
+    const username = normalizeUsername(document.getElementById('signup-username').value);
+    const email = normalizeEmail(document.getElementById('signup-email').value);
     const password = document.getElementById('signup-password').value;
     const confirmPassword = document.getElementById('signup-confirm-password').value;
     const storedUsers = getStoredUsers();
+    const rules = passwordRules(password);
 
-    const usernameOk = /^[A-Za-z0-9]{3,20}$/.test(username);
-    const usernameFree = username && !userDirectory[username.toLowerCase()] && !storedUsers[username.toLowerCase()];
-    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    const passwordOk = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password);
+    const usernameOk = /^[a-z0-9]{3,20}$/.test(username);
+    const usernameFree = username && !userDirectory[username] && !storedUsers[username];
+    const emailOk = validateEmail(email);
+    const passwordOk = Object.values(rules).every(Boolean);
     const confirmOk = confirmPassword && confirmPassword === password;
 
-    setInlineError('signup-username-error', username ? (usernameOk ? (usernameFree ? '' : 'Username already exists') : 'Username must be 3-20 letters/numbers only') : 'Username is required');
-    setInlineError('signup-email-error', email ? (emailOk ? '' : 'Enter a valid email address') : 'Email is required');
-    setInlineError('signup-password-error', password ? (passwordOk ? '' : 'Password needs 8+ chars with upper, lower, number, and special character') : 'Password is required');
-    setInlineError('signup-confirm-password-error', confirmPassword ? (confirmOk ? '' : 'Passwords do not match') : 'Confirm your password');
+    updatePasswordChecklist(password);
+
+    setFieldError('signup-username', 'signup-username-error', username ? (usernameOk ? (usernameFree ? '' : 'Username already exists') : 'Username must be lowercase letters/numbers only (3-20 chars)') : 'Username is required');
+    setFieldError('signup-email', 'signup-email-error', email ? (emailOk ? '' : 'Enter a valid email with a proper domain') : 'Email is required');
+    setFieldError('signup-password', 'signup-password-error', password ? (passwordOk ? '' : 'Password must meet all requirements below') : 'Password is required');
+    setFieldError('signup-confirm-password', 'signup-confirm-password-error', confirmPassword ? (confirmOk ? '' : 'Passwords do not match') : 'Confirm your password');
 
     const valid = usernameOk && usernameFree && emailOk && passwordOk && confirmOk;
     const btn = document.getElementById('signup-submit');
@@ -1282,18 +1590,23 @@
     return valid;
   }
 
-  function doSignup() {
+  async function doSignup() {
     if (!validateSignupForm()) return;
 
-    const username = document.getElementById('signup-username').value.trim();
-    const email = document.getElementById('signup-email').value.trim();
+    const submitBtn = document.getElementById('signup-submit');
+    setButtonLoading(submitBtn, true, 'Creating Account...');
+
+    const username = normalizeUsername(document.getElementById('signup-username').value);
+    const email = normalizeEmail(document.getElementById('signup-email').value);
     const password = document.getElementById('signup-password').value;
+    const passwordRecord = await buildPasswordRecord(password);
 
     const storedUsers = getStoredUsers();
-    storedUsers[username.toLowerCase()] = {
+    storedUsers[username] = {
       username,
       email,
-      password,
+      passwordHash: passwordRecord.passwordHash,
+      passwordSalt: passwordRecord.passwordSalt,
       name: username,
       createdAt: new Date().toISOString()
     };
@@ -1306,6 +1619,8 @@
     prefillProfileSetup(username);
     validateProfileForm();
     showToast('Account created. Complete your profile setup.');
+
+    setButtonLoading(submitBtn, false, 'Creating Account...');
   }
 
   function togglePassword(inputId, triggerEl) {
@@ -1318,6 +1633,10 @@
 
   function addProfileSkillField() {
     const wrap = document.getElementById('profile-skills-wrap');
+    if (wrap.querySelectorAll('.profile-skill-input').length >= AUTH_POLICY.maxSkills) {
+      showToast('You can add up to ' + AUTH_POLICY.maxSkills + ' skills only');
+      return;
+    }
     const field = document.createElement('div');
     field.className = 'field-light';
     field.innerHTML = '<input type="text" class="profile-skill-input" placeholder="Another skill..." oninput="validateProfileForm()" />';
@@ -1351,19 +1670,27 @@
   }
 
   function resumeProfileSetup() {
-    const username = document.getElementById('signup-username').value.trim().toLowerCase();
-    const email = document.getElementById('signup-email').value.trim();
+    const username = normalizeUsername(document.getElementById('signup-username').value);
+    const email = normalizeEmail(document.getElementById('signup-email').value);
     const storedUsers = getStoredUsers();
 
     if (!username || !storedUsers[username]) {
-      setInlineError('signup-username-error', 'Enter an existing username to resume profile setup');
+      setFieldError('signup-username', 'signup-username-error', 'Enter an existing username to resume profile setup');
       return;
     }
 
-    if (email && storedUsers[username].email && email.toLowerCase() !== storedUsers[username].email.toLowerCase()) {
-      setInlineError('signup-email-error', 'Email does not match this username');
+    if (!email) {
+      setFieldError('signup-email', 'signup-email-error', 'Enter your signup email to resume securely');
       return;
     }
+
+    if (storedUsers[username].email && email !== normalizeEmail(storedUsers[username].email)) {
+      setFieldError('signup-email', 'signup-email-error', 'Email does not match this username');
+      return;
+    }
+
+    clearFieldState('signup-username', 'signup-username-error');
+    clearFieldState('signup-email', 'signup-email-error');
 
     pendingSignup = { username, email: storedUsers[username].email };
     showView('view-profile-setup');
@@ -1379,26 +1706,37 @@
     const dept = document.getElementById('profile-dept').value.trim();
     const year = document.getElementById('profile-year').value.trim();
     const picture = document.getElementById('profile-picture').files[0];
-    const skills = Array.from(document.querySelectorAll('.profile-skill-input')).map(i => i.value.trim()).filter(Boolean);
+    const skills = getNormalizedSkills();
 
-    const fullNameOk = /^[A-Za-z ]+$/.test(fullName);
-    const dobDate = dob ? new Date(dob) : null;
-    const dobOk = !!(dobDate && !Number.isNaN(dobDate.getTime()) && dobDate <= new Date());
-    const regOk = reg.length >= 6;
-    const phoneOk = /^\d{10}$/.test(phone);
+    const fullNameOk = isValidFullName(fullName);
+    const dobResult = validateDobWithAgeBounds(dob);
+    const dobOk = dobResult.valid;
+    const regOk = /^[A-Za-z0-9-]{4,20}$/.test(reg);
+    const phoneResult = parsePhone(phone);
+    const phoneOk = phoneResult.valid;
     const deptOk = dept.length > 0;
     const yearOk = year.length > 0;
-    const skillsOk = skills.length > 0;
-    const pictureOk = !picture || ['image/jpeg', 'image/png'].includes(picture.type);
+    const rawSkills = Array.from(document.querySelectorAll('.profile-skill-input')).map(i => i.value.trim()).filter(Boolean);
+    const hasDuplicateSkills = new Set(rawSkills.map(s => s.toLowerCase())).size !== rawSkills.length;
+    const skillsOk = skills.length > 0 && !hasDuplicateSkills && skills.length <= AUTH_POLICY.maxSkills;
+    const pictureTypeOk = !picture || ['image/jpeg', 'image/png'].includes(picture.type);
+    const pictureSizeOk = !picture || picture.size <= AUTH_POLICY.maxImageSizeBytes;
+    const pictureOk = pictureTypeOk && pictureSizeOk;
 
-    setInlineError('profile-full-name-error', fullName ? (fullNameOk ? '' : 'Full name must contain letters and spaces only') : 'Full name is required');
-    setInlineError('profile-dob-error', dob ? (dobOk ? '' : 'Enter a valid date of birth') : 'Date of birth is required');
-    setInlineError('profile-reg-error', reg ? (regOk ? '' : 'Registration number must be at least 6 characters') : 'Registration number is required');
-    setInlineError('profile-phone-error', phone ? (phoneOk ? '' : 'Phone number must be exactly 10 digits') : 'Phone number is required');
-    setInlineError('profile-dept-error', deptOk ? '' : 'Department / Branch is required');
-    setInlineError('profile-year-error', yearOk ? '' : 'Year of study is required');
-    setInlineError('profile-skills-error', skillsOk ? '' : 'Add at least one skill');
-    setInlineError('profile-picture-error', pictureOk ? '' : 'Profile picture must be JPG or PNG');
+    setFieldError('profile-full-name', 'profile-full-name-error', fullName ? (fullNameOk ? '' : 'Use 2-50 characters, letters, spaces, hyphen, or apostrophe') : 'Full name is required');
+    setFieldError('profile-dob', 'profile-dob-error', dob ? (dobOk ? '' : (dobResult.reason === 'too-young' ? 'You must be at least ' + AUTH_POLICY.ageMin + ' years old' : 'Enter a valid date of birth')) : 'Date of birth is required');
+    setFieldError('profile-reg', 'profile-reg-error', reg ? (regOk ? '' : 'Use 4-20 letters, numbers, or hyphen only') : 'Registration number is required');
+    setFieldError('profile-phone', 'profile-phone-error', phone ? (phoneOk ? '' : 'Use 10 digits or international format like +919999999999') : 'Phone number is required');
+    setFieldError('profile-dept', 'profile-dept-error', deptOk ? '' : 'Department / Branch is required');
+    setFieldError('profile-year', 'profile-year-error', yearOk ? '' : 'Year of study is required');
+    setInlineError('profile-skills-error', skills.length === 0 ? 'Add at least one skill' : (hasDuplicateSkills ? 'Duplicate skills are not allowed' : (skills.length > AUTH_POLICY.maxSkills ? 'Use up to ' + AUTH_POLICY.maxSkills + ' skills' : '')));
+    setFieldError('profile-picture', 'profile-picture-error', pictureOk ? '' : (pictureTypeOk ? 'Profile picture must be 5MB or smaller' : 'Profile picture must be JPG or PNG'));
+
+    const skillsWrap = document.getElementById('profile-skills-wrap');
+    if (skillsWrap) {
+      skillsWrap.classList.remove('invalid', 'valid');
+      skillsWrap.classList.add(skillsOk ? 'valid' : 'invalid');
+    }
 
     const valid = fullNameOk && dobOk && regOk && phoneOk && deptOk && yearOk && skillsOk && pictureOk;
     const btn = document.getElementById('profile-submit');
@@ -1418,10 +1756,10 @@
       fullName,
       dob: document.getElementById('profile-dob').value,
       registrationNumber: document.getElementById('profile-reg').value.trim(),
-      phone: document.getElementById('profile-phone').value.trim(),
+      phone: parsePhone(document.getElementById('profile-phone').value.trim()).cleaned,
       department: document.getElementById('profile-dept').value.trim(),
       yearOfStudy: document.getElementById('profile-year').value.trim(),
-      skills: Array.from(document.querySelectorAll('.profile-skill-input')).map(i => i.value.trim()).filter(Boolean),
+      skills: getNormalizedSkills(),
       specialization: document.getElementById('profile-specialization').value.trim(),
       profilePictureName: (document.getElementById('profile-picture').files[0] || {}).name || ''
     };
@@ -1445,7 +1783,63 @@
     updateUserUI();
     updateAccessUI();
     initCalendar();
+    pendingSignup = null;
     showToast('Profile setup complete. Welcome, ' + fullName + '!');
+  }
+
+  function initializeAuthFieldBindings() {
+    const loginUser = document.getElementById('login-user');
+    const loginPass = document.getElementById('login-pass');
+
+    [loginUser, loginPass].forEach(input => {
+      if (!input) return;
+      input.addEventListener('input', () => {
+        document.getElementById('login-error').style.display = 'none';
+        clearFieldState('login-user', 'login-error');
+        clearFieldState('login-pass', 'login-error');
+      });
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          doLogin();
+        }
+      });
+    });
+
+    const signupPassword = document.getElementById('signup-password');
+    const signupConfirm = document.getElementById('signup-confirm-password');
+    if (signupPassword && signupConfirm) {
+      signupPassword.addEventListener('input', () => {
+        updatePasswordChecklist(signupPassword.value);
+        if (signupConfirm.value) validateSignupForm();
+      });
+    }
+  }
+
+  function initializeAuthAccessibility() {
+    const map = [
+      ['signup-username', 'signup-username-error'],
+      ['signup-email', 'signup-email-error'],
+      ['signup-password', 'signup-password-error'],
+      ['signup-confirm-password', 'signup-confirm-password-error'],
+      ['profile-full-name', 'profile-full-name-error'],
+      ['profile-dob', 'profile-dob-error'],
+      ['profile-reg', 'profile-reg-error'],
+      ['profile-phone', 'profile-phone-error'],
+      ['profile-dept', 'profile-dept-error'],
+      ['profile-year', 'profile-year-error'],
+      ['profile-picture', 'profile-picture-error']
+    ];
+
+    map.forEach(([inputId, errId]) => {
+      const input = document.getElementById(inputId);
+      const err = document.getElementById(errId);
+      if (input && err) {
+        input.setAttribute('aria-describedby', errId);
+        err.setAttribute('role', 'alert');
+        err.setAttribute('aria-live', 'polite');
+      }
+    });
   }
 
   // ===== LOGOUT =====
@@ -1952,6 +2346,11 @@
 
   // Initialize on page load
   document.addEventListener('DOMContentLoaded', function() {
+    initializeAuthAccessibility();
+    initializeAuthFieldBindings();
+    updatePasswordChecklist(document.getElementById('signup-password')?.value || '');
+    validateSignupForm();
+    validateProfileForm();
     updateUserUI();
     updateAccessUI();
     renderHackathons();
