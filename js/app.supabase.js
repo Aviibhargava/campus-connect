@@ -191,7 +191,15 @@ function applyProfileToLegacyUI() {
 
   if (typeof window.updateUserUI === 'function') window.updateUserUI();
   if (typeof window.updateAccessUI === 'function') window.updateAccessUI();
+  
+  const prefName = document.getElementById('pref-name');
+  const prefEmail = document.getElementById('pref-email');
+  const prefMajor = document.getElementById('pref-major');
+  if (prefName) prefName.value = mappedUser.name || '';
+  if (prefEmail) prefEmail.value = mappedUser.email || '';
+  if (prefMajor) prefMajor.value = mappedUser.department || '';
 }
+
 
 async function refreshData() {
   if (!state.user) return;
