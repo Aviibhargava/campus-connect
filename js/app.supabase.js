@@ -1194,25 +1194,38 @@ async function loadCommunityProfiles() {
   const feed = document.getElementById('community-feed');
   if (!feed) return;
 
-  const { data, error } = await supabase
+  const { data: profiles, error } = await supabase
     .from('profiles')
     .select('id, full_name, department, year, skills, bio, role')
     .order('created_at', { ascending: false });
 
-  if (error) {
-    feed.innerHTML = '<div class="club-list-item"><h4>Could not load profiles</h4></div>';
+  if (error || !profiles || !profiles.length) {
+    feed.innerHTML = '<div class="club-list-item"><h4>No users found</h4></div>';
     return;
   }
 
-  if (!data || data.length === 0) {
-    feed.innerHTML = '<div class="club-list-item"><h4>No users found yet</h4></div>';
-    return;
-  }
+  const { data: friendships } = await supabase
+    .from('friendships')
+    .select('requester_id, receiver_id, status')
+    .or(`requester_id.eq.${state.user.id},receiver_id.eq.${state.user.id}`);
 
-  feed.innerHTML = data.map(p => {
-    const initials = (p.full_name || 'U')
-      .split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const friendMap = {};
+  (friendships || []).forEach(f => {
+    const otherId = f.requester_id === state.user.id ? f.receiver_id : f.requester_id;
+    friendMap[otherId] = f.status;
+  });
+
+  feed.innerHTML = profiles.map(p => {
+    if (p.id === state.user.id) return '';
+    const initials = (p.full_name || 'U').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     const skills = Array.isArray(p.skills) ? p.skills : [];
+    const fStatus = friendMap[p.id];
+    const friendBtn = fStatus === 'accepted'
+      ? `<button class="btn-link" disabled><i class="fas fa-user-check"></i> Friends</button>`
+      : fStatus === 'pending'
+      ? `<button class="btn-link" disabled><i class="fas fa-clock"></i> Pending</button>`
+      : `<button class="btn-link" onclick="window.sendFriendRequest('${p.id}')"><i class="fas fa-user-plus"></i> Add Friend</button>`;
+
     return `
       <div class="community-card">
         <div class="community-head">
@@ -1226,10 +1239,48 @@ async function loadCommunityProfiles() {
         <div class="community-tags">
           ${skills.map(s => `<span class="community-tag">${s}</span>`).join('')}
         </div>
+        <div class="community-actions">
+          <button class="btn-link" onclick="window.viewProfile('${p.id}', '${escapeHtml(p.full_name)}', '${escapeHtml(p.bio || '')}', '${p.role}', '${escapeHtml(p.department || '')}', ${JSON.stringify(skills)})">
+            <i class="fas fa-user"></i> View Profile
+          </button>
+          ${friendBtn}
+        </div>
       </div>
     `;
   }).join('');
 }
+
+window.sendFriendRequest = async function(receiverId) {
+  if (!state.user) return;
+  const { error } = await supabase.from('friendships').insert({
+    requester_id: state.user.id,
+    receiver_id: receiverId
+  });
+  if (error) { showToast('Could not send request: ' + error.message); return; }
+  showToast('Friend request sent!');
+  loadCommunityProfiles();
+};
+
+window.viewProfile = function(id, name, bio, role, dept, skills) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;display:flex;align-items:center;justify-content:center;';
+  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const skillTags = skills.map(s => `<span class="skill-tag">${s}</span>`).join('');
+  overlay.innerHTML = `
+    <div style="background:var(--white);border-radius:16px;padding:2rem;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="text-align:center;margin-bottom:1.5rem;">
+        <div style="width:80px;height:80px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#ec4899);display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:#fff;margin:0 auto 1rem;">${initials}</div>
+        <div style="font-size:1.3rem;font-weight:700;color:var(--gray-900);">${name}</div>
+        <div style="font-size:0.85rem;color:var(--gray-600);margin-top:4px;">${role} • ${dept}</div>
+      </div>
+      <div style="font-size:0.85rem;color:var(--gray-700);margin-bottom:1rem;line-height:1.6;">${bio || 'No bio added yet.'}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.5rem;">${skillTags}</div>
+      <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;background:var(--primary);color:#fff;border:none;border-radius:10px;padding:0.9rem;font-family:inherit;font-size:0.95rem;font-weight:600;cursor:pointer;">Close</button>
+    </div>
+  `;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+};
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     if (document.getElementById('page-community')?.classList.contains('active')) {
