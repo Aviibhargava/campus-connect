@@ -1181,3 +1181,50 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+async function loadCommunityProfiles() {
+  const feed = document.getElementById('community-feed');
+  if (!feed) return;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, department, year, skills, bio, role')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    feed.innerHTML = '<div class="club-list-item"><h4>Could not load profiles</h4></div>';
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    feed.innerHTML = '<div class="club-list-item"><h4>No users found yet</h4></div>';
+    return;
+  }
+
+  feed.innerHTML = data.map(p => {
+    const initials = (p.full_name || 'U')
+      .split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    const skills = Array.isArray(p.skills) ? p.skills : [];
+    return `
+      <div class="community-card">
+        <div class="community-head">
+          <div class="community-avatar">${initials}</div>
+          <div>
+            <div class="community-title">${p.full_name || 'Unknown'}</div>
+            <div class="community-sub">${p.role || 'student'} • ${p.department || ''}</div>
+          </div>
+        </div>
+        <div class="community-sub" style="margin-top:0.4rem;">${p.bio || 'No bio added yet.'}</div>
+        <div class="community-tags">
+          ${skills.map(s => `<span class="community-tag">${s}</span>`).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    if (document.getElementById('page-community')?.classList.contains('active')) {
+      loadCommunityProfiles();
+    }
+  });
+});
