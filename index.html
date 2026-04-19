@@ -2109,6 +2109,20 @@ let currentUser = Store.get('currentUser') || {
     { name: 'Sarah Davis', username: '@sarahd', bio: 'Product designer focused on research-driven UX.', tags: ['UX', 'Design Systems', 'Research'] }
   ];
 
+  function getCommunityPeople() {
+    const stored = Store.get('currentUser');
+    const people = [...communityPeople];
+    if (stored && stored.name && !people.find(p => p.name === stored.name)) {
+      people.unshift({
+        name: stored.name,
+        username: '@' + (stored.username || stored.name.toLowerCase().replace(' ', '.')),
+        bio: stored.bio || 'Campus Connect member.',
+        tags: []
+      });
+    }
+    return people;
+  }
+
   let communityTab = 'all';
 
   const hackathons = [
@@ -2247,7 +2261,7 @@ let currentUser = Store.get('currentUser') || {
     const cards = [];
 
     if (communityTab !== 'teams') {
-      communityPeople.forEach(person => {
+      getCommunityPeople().forEach(person => {
         const blob = `${person.name} ${person.username} ${person.bio} ${(person.tags || []).join(' ')}`.toLowerCase();
         if (q && !blob.includes(q)) return;
         cards.push(`
