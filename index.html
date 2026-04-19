@@ -1265,25 +1265,31 @@
 <div class="success-toast" id="toast"><i class="fas fa-check-circle"></i> <span id="toast-text">Success</span></div>
 
 <script>
-  // ===== STATE =====
-  let currentUser = {
-    username: 'alex.johnson',
-    name: 'Alex Johnson',
-    initials: 'AJ',
-    email: 'alex.johnson@student.edu',
-    phone: '+91 9876543210',
-    profileRole: 'Student',
-    department: 'Computer Science',
-    program: 'B.S. Computer Science',
-    yearOrExperience: 'Year 3',
-    cgpa: '3.8',
-    idNumber: '2023CS041',
-    linkedIn: '',
-    githubOrPortfolio: '',
-    bio: 'Building practical products and collaborating in hackathons.',
-    role: 'student',
-    canManageClubs: false
-  };
+  // ========== STORAGE LAYER ==========
+const Store = {
+  get: (key) => { try { return JSON.parse(localStorage.getItem('cc_' + key)); } catch { return null; } },
+  set: (key, val) => { try { localStorage.setItem('cc_' + key, JSON.stringify(val)); } catch {} },
+  del: (key) => localStorage.removeItem('cc_' + key)
+};
+ // ===== STATE =====
+let currentUser = Store.get('currentUser') || {
+  username: 'alex.johnson',
+  name: 'Alex Johnson',
+  initials: 'AJ',
+  email: 'alex.johnson@student.edu',
+  phone: '+91 9876543210',
+  profileRole: 'Student',
+  department: 'Computer Science',
+  program: 'B.S. Computer Science',
+  yearOrExperience: 'Year 3',
+  cgpa: '3.8',
+  idNumber: '2023CS041',
+  linkedIn: '',
+  githubOrPortfolio: '',
+  bio: 'Building practical products and collaborating in hackathons.',
+  role: 'student',
+  canManageClubs: false
+};
 
   // Bridge for module scripts: legacy UI reads this closure-scoped object.
   window.__ccGetCurrentUser = function () {
@@ -1730,6 +1736,7 @@
       updateUserUI();
       updateAccessUI();
       initCalendar();
+      Store.set('currentUser', currentUser);
       showToast('Welcome back! ' + currentUser.name);
     } else {
       registerFailedLoginAttempt();
@@ -2044,6 +2051,10 @@
 
   // ===== LOGOUT =====
   function doLogout() {
+    Store.del('currentUser');
+    Store.del('joinedHackathons');
+    Store.del('joinedTeams');
+    Store.del('joinedClubs'); 
     showView('view-login');
     document.getElementById('login-user').value = '';
     document.getElementById('login-pass').value = '';
@@ -2380,6 +2391,7 @@
       `;
       grid.appendChild(card);
     });
+     applyJoinedHackathonStates();
   }
 
   function filterHackathons() {
@@ -2462,11 +2474,31 @@
   }
 
   // ===== MODAL =====
-  function openJoinModal(name) {
+ function openJoinModal(name) {
     document.getElementById('modal-title').innerHTML = '<i class="fas fa-handshake"></i> Join ' + name + '?';
     document.getElementById('modal-body').textContent = `You're about to join "${name}". Your team will be notified and you'll gain access to all resources.`;
     document.getElementById('modal').classList.add('open');
-    modalCallback = () => showToast('Successfully joined ' + name + '!');
+    modalCallback = () => {
+      let joined = Store.get('joinedHackathons') || [];
+      if (!joined.includes(name)) joined.push(name);
+      Store.set('joinedHackathons', joined);
+      showToast('Successfully joined ' + name + '!');
+      applyJoinedHackathonStates();
+    };
+  }
+
+  function applyJoinedHackathonStates() {
+    const joined = Store.get('joinedHackathons') || [];
+    document.querySelectorAll('.hack-card').forEach(card => {
+      const name = card.querySelector('h3')?.textContent?.trim();
+      const btn = card.querySelector('.btn-join');
+      if (btn && joined.includes(name)) {
+        btn.textContent = 'Joined ✓';
+        btn.disabled = true;
+        btn.style.background = '#10b981';
+        btn.style.cursor = 'default';
+      }
+    });
   }
   function closeModal() { document.getElementById('modal').classList.remove('open'); }
   function confirmModal() { closeModal(); if(modalCallback) { modalCallback(); modalCallback=null; } }
