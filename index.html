@@ -316,6 +316,8 @@
   .community-post-label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--primary-dark); background: var(--primary-light); border-radius: 999px; padding: 0.25rem 0.55rem; margin-bottom: 0.7rem; }
   .community-post-card h3 { font-size: 1rem; color: var(--gray-900); margin-bottom: 0.45rem; }
   .community-post-card p { font-size: 0.82rem; color: var(--gray-600); line-height: 1.55; }
+  .posts-page-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.2rem; }
+  .posts-page-intro { color: var(--gray-600); margin: -0.8rem 0 1.5rem; max-width: 680px; }
   .community-head { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.7rem; }
   .community-avatar { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
   .community-title { font-size: 0.92rem; font-weight: 700; color: var(--gray-900); }
@@ -588,22 +590,25 @@
       <div class="user-email" id="sidebar-email">alex.johnson@student.edu</div>
     </div>
     <nav>
-      <div class="nav-item active" onclick="showPage('page-dashboard',this)">
+      <div class="nav-item active" id="nav-dashboard" onclick="showPage('page-dashboard',this)">
         <i class="fas fa-th"></i> <span>Dashboard</span>
       </div>
-      <div class="nav-item" onclick="showPage('page-hackathons',this)">
-        <i class="fas fa-laptop-code"></i> <span>Hackathons</span>
+      <div class="nav-item" id="nav-posts" onclick="showPage('page-posts',this)">
+        <i class="fas fa-newspaper"></i> <span>Posts</span>
       </div>
-      <div class="nav-item" onclick="showPage('page-projects',this)">
+      <div class="nav-item" id="nav-events" onclick="showPage('page-hackathons',this)">
+        <i class="fas fa-calendar-check"></i> <span>Events</span>
+      </div>
+      <div class="nav-item" id="nav-projects" onclick="showPage('page-projects',this)">
         <i class="fas fa-folder"></i> <span>Projects</span>
       </div>
-      <div class="nav-item" onclick="showPage('page-clubs',this)">
+      <div class="nav-item" id="nav-clubs" onclick="showPage('page-clubs',this)">
         <i class="fas fa-users"></i> <span>Clubs</span>
       </div>
       <div class="nav-item" id="nav-club-portal" onclick="showPage('page-club-portal',this)">
         <i class="fas fa-building"></i> <span>Club Portal</span>
       </div>
-      <div class="nav-item" onclick="showPage('page-notifications',this)">
+      <div class="nav-item" id="nav-notifications" onclick="showPage('page-notifications',this)">
         <i class="fas fa-bell"></i> <span>Notifications</span>
       </div>
       <div class="nav-item" id="nav-community" onclick="showPage('page-community',this)">
@@ -635,7 +640,7 @@
         <input type="text" placeholder="Search hackathons, projects..." />
       </div>
       <div class="topbar-actions">
-        <div class="icon-btn badge" onclick="showPage('page-notifications',document.querySelectorAll('.nav-item')[5])" title="Notifications">
+        <div class="icon-btn badge" onclick="showPage('page-notifications',document.getElementById('nav-notifications'))" title="Notifications">
           <i class="fas fa-bell"></i>
         </div>
         <div class="icon-btn" onclick="alert('Calendar feature coming soon!')" title="Calendar">
@@ -749,6 +754,13 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- POSTS PAGE -->
+    <div id="page-posts" class="page">
+      <h2 style="margin-bottom:1.2rem;font-size:1.3rem;font-weight:700;"><i class="fas fa-newspaper"></i> Posts</h2>
+      <p class="posts-page-intro">Demo announcements and team updates appear here as dashboard-style cards, so students can quickly scan opportunities and project notes.</p>
+      <div id="posts-grid" class="posts-page-grid"></div>
     </div>
 
     <!-- PROFILE PAGE -->
@@ -1060,7 +1072,7 @@
     <div id="page-clubs" class="page">
       <h2 style="margin-bottom:2rem;font-size:1.3rem;font-weight:700;"><i class="fas fa-users"></i> Campus Clubs & Communities</h2>
       <div style="display:flex;justify-content:flex-end;margin-bottom:1rem;">
-        <button class="btn-purple" id="open-club-portal-btn" onclick="showPage('page-club-portal',document.querySelectorAll('.nav-item')[4])"><i class="fas fa-building"></i> Open Club Portal</button>
+        <button class="btn-purple" id="open-club-portal-btn" onclick="showPage('page-club-portal',document.getElementById('nav-club-portal'))"><i class="fas fa-building"></i> Open Club Portal</button>
       </div>
       <div id="clubs-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(250px, 1fr));gap:1.5rem;">
         <div class="dash-card">
@@ -2092,15 +2104,16 @@ let currentUser = Store.get('currentUser') || {
     };
     updateUserUI();
     updateAccessUI();
-    showPage('page-dashboard', document.querySelectorAll('.nav-item')[0]);
+    showPage('page-dashboard', document.getElementById('nav-dashboard'));
     showToast('You have been signed out');
   }
 
   // ===== PAGE SWITCHING =====
   const pageTitles = {
     'page-dashboard': 'Dashboard',
+    'page-posts': 'Posts',
     'page-profile': 'Profile',
-    'page-hackathons': 'Hackathons',
+    'page-hackathons': 'Events',
     'page-team': 'Team',
     'page-notifications': 'Notifications',
     'page-projects': 'Projects',
@@ -2241,6 +2254,10 @@ let currentUser = Store.get('currentUser') || {
     if (pageId === 'page-community') {
       renderCommunityFeed();
     }
+
+    if (pageId === 'page-posts') {
+      renderPostsPage();
+    }
   }
 
   function initialsFromName(name) {
@@ -2280,6 +2297,30 @@ let currentUser = Store.get('currentUser') || {
 
   function searchCommunity() {
     renderCommunityFeed();
+  }
+
+  function renderPostsPage() {
+    const grid = document.getElementById('posts-grid');
+    if (!grid) return;
+
+    grid.innerHTML = '';
+    demoPosts.forEach(post => {
+      const card = document.createElement('div');
+      card.className = 'community-post-card';
+
+      const label = document.createElement('div');
+      label.className = 'community-post-label';
+      label.innerHTML = '<i class="fas fa-bullhorn"></i> Demo Post';
+
+      const title = document.createElement('h3');
+      title.textContent = post.title;
+
+      const description = document.createElement('p');
+      description.textContent = post.description;
+
+      card.append(label, title, description);
+      grid.appendChild(card);
+    });
   }
 
   function renderCommunityFeed() {
@@ -2700,7 +2741,7 @@ let currentUser = Store.get('currentUser') || {
     if (!canAccess) {
       const clubPortalPage = document.getElementById('page-club-portal');
       if (clubPortalPage && clubPortalPage.classList.contains('active')) {
-        showPage('page-clubs', document.querySelectorAll('.nav-item')[3]);
+        showPage('page-clubs', document.getElementById('nav-clubs'));
       }
     }
   }
