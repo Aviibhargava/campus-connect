@@ -475,6 +475,9 @@ function renderHackathons(list = state.hackathons) {
               <i class="fas ${isRegistered ? 'fa-check-circle' : 'fa-plus-circle'}"></i> ${isRegistered ? 'Already joined' : 'Register'}
             </button>
             ${isRegistered ? `<button class="btn-link" onclick="window.leaveHackathonRegistration(${item.id})"><i class="fas fa-times-circle"></i> Unenroll</button>` : ''}
+            <button class="btn-link" onclick="alert(decodeURIComponent('${encodeURIComponent('Title: ' + (item.title || '') + '\\nDescription: ' + (item.description || ''))}'))">View Details</button>
+            <button class="btn-link">Create Team</button>
+            <button class="btn-link">View Teams</button>
           </div>
         </div>
       `;
@@ -989,25 +992,39 @@ function wireEntityActions() {
   };
 
   window.joinHackathonRegistration = async function joinHackathonRegistration(hackathonId) {
-    if (!state.user) return;
+    if (!state.user) {
+      showToast('Please log in to register.');
+      return;
+    }
     if (getRegisteredHackathonSet().has(hackathonId)) {
       showToast('You have already joined this hackathon.');
       return;
     }
-    await registerHackathon(state.user.id, hackathonId);
-    await refreshData();
-    showToast('Hackathon registered.');
+    try {
+      await registerHackathon(state.user.id, hackathonId);
+      await refreshData();
+      showToast('Hackathon registered.');
+    } catch (err) {
+      showToast(err.message || 'Failed to register for hackathon.');
+    }
   };
 
   window.leaveHackathonRegistration = async function leaveHackathonRegistration(hackathonId) {
-    if (!state.user) return;
+    if (!state.user) {
+      showToast('Please log in to unenroll.');
+      return;
+    }
     if (!getRegisteredHackathonSet().has(hackathonId)) {
       showToast('You are not enrolled in this hackathon.');
       return;
     }
-    await unregisterHackathon(state.user.id, hackathonId);
-    await refreshData();
-    showToast('Hackathon unenrolled successfully.');
+    try {
+      await unregisterHackathon(state.user.id, hackathonId);
+      await refreshData();
+      showToast('Hackathon unenrolled successfully.');
+    } catch (err) {
+      showToast(err.message || 'Failed to unenroll.');
+    }
   };
 
   window.filterHackathons = filterHackathons;

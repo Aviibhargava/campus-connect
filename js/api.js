@@ -264,7 +264,7 @@ export async function leaveClub(userId, clubId) {
 export async function registerProject(userId, projectId) {
   const { error } = await supabase
     .from('registrations')
-    .upsert({ user_id: userId, project_id: projectId, hackathon_id: null }, { onConflict: 'user_id,project_id' });
+    .insert({ user_id: userId, project_id: projectId });
 
   throwOnError(error, 'Could not register project');
 }
@@ -282,7 +282,7 @@ export async function unregisterProject(userId, projectId) {
 export async function registerHackathon(userId, hackathonId) {
   const { error } = await supabase
     .from('registrations')
-    .upsert({ user_id: userId, project_id: null, hackathon_id: hackathonId }, { onConflict: 'user_id,hackathon_id' });
+    .insert({ user_id: userId, hackathon_id: hackathonId });
 
   throwOnError(error, 'Could not register hackathon');
 }
