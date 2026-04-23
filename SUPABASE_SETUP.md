@@ -118,20 +118,20 @@ await supabase.from('memberships')
 
 ### Register Hackathon
 ```js
-await supabase.from('registrations').upsert({
+await supabase.from('registrations').insert({
   user_id: user.id,
   hackathon_id: 3,
   project_id: null
-}, { onConflict: 'user_id,hackathon_id' });
+});
 ```
 
 ### Register Project
 ```js
-await supabase.from('registrations').upsert({
+await supabase.from('registrations').insert({
   user_id: user.id,
   project_id: 7,
   hackathon_id: null
-}, { onConflict: 'user_id,project_id' });
+});
 ```
 
 ### Fetch Dashboard Data
