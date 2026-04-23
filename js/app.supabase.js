@@ -48,6 +48,21 @@ const state = {
   registrations: []
 };
 
+const demoPosts = [
+  {
+    title: 'Looking for a React teammate',
+    description: 'Our hackathon team is building a student dashboard and needs one frontend-focused member to help polish the UI.'
+  },
+  {
+    title: 'AI workshop notes shared',
+    description: 'I uploaded quick notes from the campus AI session, including prompts, model comparison tips, and project ideas.'
+  },
+  {
+    title: 'Open call for project testers',
+    description: 'We need classmates to test our event registration flow and share feedback before the next club demo.'
+  }
+];
+
 function escapeHtml(text) {
   return String(text || '')
     .replaceAll('&', '&amp;')
@@ -1194,13 +1209,21 @@ async function loadCommunityProfiles() {
   const feed = document.getElementById('community-feed');
   if (!feed) return;
 
+  const postCards = demoPosts.map((post) => `
+    <div class="community-post-card">
+      <div class="community-post-label"><i class="fas fa-bullhorn"></i> Demo Post</div>
+      <h3>${escapeHtml(post.title)}</h3>
+      <p>${escapeHtml(post.description)}</p>
+    </div>
+  `);
+
   const { data: profiles, error } = await supabase
     .from('profiles')
     .select('id, full_name, department, year, skills, bio, role')
     .order('created_at', { ascending: false });
 
   if (error || !profiles || !profiles.length) {
-    feed.innerHTML = '<div class="club-list-item"><h4>No users found</h4></div>';
+    feed.innerHTML = postCards.join('') + '<div class="club-list-item"><h4>No users found</h4></div>';
     return;
   }
 
@@ -1215,7 +1238,7 @@ async function loadCommunityProfiles() {
     friendMap[otherId] = f.status;
   });
 
-  feed.innerHTML = profiles.map(p => {
+  const profileCards = profiles.map(p => {
     if (p.id === state.user.id) return '';
     const initials = (p.full_name || 'U').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     const skills = Array.isArray(p.skills) ? p.skills : [];
@@ -1248,6 +1271,7 @@ async function loadCommunityProfiles() {
       </div>
     `;
   }).join('');
+  feed.innerHTML = postCards.join('') + profileCards;
 }
 
 window.sendFriendRequest = async function(receiverId) {
